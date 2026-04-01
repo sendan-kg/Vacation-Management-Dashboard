@@ -88,8 +88,17 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [lastUpdatedYMD, setLastUpdatedYMD] = useState<string | null>(null);
 
   const isAdmin = user?.email === 'alwayshappys2.forever@gmail.com';
+
+  useEffect(() => {
+    if (lastUpdatedYMD) {
+      document.title = `有給休暇消化率ダッシュボード${lastUpdatedYMD}`;
+    } else {
+      document.title = '有給休暇消化率ダッシュボード';
+    }
+  }, [lastUpdatedYMD]);
 
   // 認証状態の監視
   useEffect(() => {
@@ -125,8 +134,10 @@ export default function App() {
       (docSnap) => {
         if (docSnap.exists()) {
           setLastUpdated(docSnap.data().lastUpdated);
+          setLastUpdatedYMD(docSnap.data().lastUpdatedYMD);
         } else {
           setLastUpdated(null);
+          setLastUpdatedYMD(null);
         }
       },
       (err) => {
@@ -338,8 +349,12 @@ export default function App() {
                     // メタデータ（更新日）の保存
                     const today = new Date();
                     const dateString = `${today.getMonth() + 1}月${today.getDate()}日`;
+                    const yyyy = today.getFullYear();
+                    const mm = String(today.getMonth() + 1).padStart(2, '0');
+                    const dd = String(today.getDate()).padStart(2, '0');
+                    const dateStringYMD = `${yyyy}${mm}${dd}`;
                     const metadataRef = doc(db, 'metadata', 'system');
-                    currentAddBatch.set(metadataRef, { lastUpdated: dateString });
+                    currentAddBatch.set(metadataRef, { lastUpdated: dateString, lastUpdatedYMD: dateStringYMD });
                     addCount++;
 
                     parsedData.forEach((emp) => {
