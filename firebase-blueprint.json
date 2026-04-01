@@ -13,12 +13,25 @@
         "usedDays": { "type": "number", "minimum": 0 }
       },
       "required": ["id", "name", "department", "grantDate", "grantedDays", "usedDays"]
+    },
+    "SystemMetadata": {
+      "title": "System Metadata",
+      "description": "System-wide metadata like last updated date",
+      "type": "object",
+      "properties": {
+        "lastUpdated": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["lastUpdated"]
     }
   },
   "firestore": {
     "/pto_data/{employeeId}": {
       "schema": { "$ref": "#/entities/EmployeeData" },
       "description": "Stores PTO data for each employee"
+    },
+    "/metadata/{docId}": {
+      "schema": { "$ref": "#/entities/SystemMetadata" },
+      "description": "Stores system metadata"
     }
   }
 }

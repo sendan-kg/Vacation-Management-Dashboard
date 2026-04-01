@@ -15,6 +15,11 @@ service cloud.firestore {
     //   - grantedDays: number (required, >= 0)
     //   - usedDays: number (required, >= 0)
     //
+    // Collection: metadata
+    // Document ID: system
+    // Fields:
+    //   - lastUpdated: string (required, max 50 chars)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -44,6 +49,11 @@ service cloud.firestore {
              data.usedDays is number && data.usedDays >= 0;
     }
 
+    function isValidMetadata(data) {
+      return hasOnlyAllowedFields(['lastUpdated']) &&
+             data.lastUpdated is string && data.lastUpdated.size() > 0 && data.lastUpdated.size() < 50;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -55,6 +65,13 @@ service cloud.firestore {
       // Only admin can create/update/delete
       allow create: if isAdmin() && isValidEmployeeData(request.resource.data);
       allow update: if isAdmin() && isValidEmployeeData(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /metadata/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidMetadata(request.resource.data);
+      allow update: if isAdmin() && isValidMetadata(request.resource.data);
       allow delete: if isAdmin();
     }
   }

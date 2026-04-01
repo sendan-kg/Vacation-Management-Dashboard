@@ -74,6 +74,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   const isAdmin = user?.email === 'alwayshappys2.forever@gmail.com';
 
@@ -106,7 +107,24 @@ export default function App() {
       }
     );
 
-    return () => unsubscribe();
+    const unsubscribeMeta = onSnapshot(
+      doc(db, 'metadata', 'system'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setLastUpdated(docSnap.data().lastUpdated);
+        } else {
+          setLastUpdated(null);
+        }
+      },
+      (err) => {
+        console.error('Metadata fetch error:', err);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      unsubscribeMeta();
+    };
   }, [user, isAuthReady]);
 
   const handleLogin = async () => {
@@ -297,6 +315,13 @@ export default function App() {
                     let currentAddBatch = writeBatch(db);
                     let addCount = 0;
 
+                    // メタデータ（更新日）の保存
+                    const today = new Date();
+                    const dateString = `${today.getMonth() + 1}月${today.getDate()}日`;
+                    const metadataRef = doc(db, 'metadata', 'system');
+                    currentAddBatch.set(metadataRef, { lastUpdated: dateString });
+                    addCount++;
+
                     parsedData.forEach((emp) => {
                       const docRef = doc(db, 'pto_data', emp.id);
                       currentAddBatch.set(docRef, emp);
@@ -387,8 +412,15 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Calendar className="w-6 h-6 text-blue-600" />
-            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">有給休暇 消化率ダッシュボード</h1>
-            <h1 className="text-lg font-bold text-slate-800 sm:hidden print:hidden">有給ダッシュボード</h1>
+            <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+              <h1 className="text-xl font-bold text-slate-800 hidden sm:block">有給休暇 消化率ダッシュボード</h1>
+              <h1 className="text-lg font-bold text-slate-800 sm:hidden print:hidden">有給ダッシュボード</h1>
+              {lastUpdated && (
+                <span className="text-sm font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 print:border-none print:bg-transparent print:p-0 print:text-slate-800">
+                  {lastUpdated}時点
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3 print:hidden">
             <button
