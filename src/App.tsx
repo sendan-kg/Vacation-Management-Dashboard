@@ -22,7 +22,8 @@ import {
   CheckCircle,
   Crown,
   LogOut,
-  LogIn
+  LogIn,
+  Printer
 } from 'lucide-react';
 import Papa from 'papaparse';
 import Encoding from 'encoding-japanese';
@@ -243,12 +244,12 @@ export default function App() {
               for (let i = dataStartIndex; i < rows.length; i++) {
                 const row = rows[i];
                 
-                if (!row[1] || !row[4]) continue; // 社員番号か氏名がない行はスキップ
+                if (!row[1] && !row[4]) continue; // 社員番号も氏名もない行はスキップ
                 
-                const id = row[1]?.trim() || '';
-                const department = row[2]?.trim() || '';
+                const id = row[1]?.trim() || Math.random().toString(36).substring(2, 15);
+                const department = row[2]?.trim() || '未設定';
                 const name = row[4]?.trim() || '不明';
-                const grantDate = row[8]?.trim() || '';
+                const grantDate = row[8]?.trim() || '未設定';
                 // 13列目（0始まりで13、CSVのN列）が「今年度付与日数」
                 const grantedDays = Number(row[13]) || 0;
                 // 6列目（0始まりで6、CSVのG列）が「取得日数」
@@ -269,27 +270,52 @@ export default function App() {
                 const saveToFirestore = async () => {
                   setIsUploading(true);
                   try {
-                    const batch = writeBatch(db);
-                    
                     // 既存のデータをすべて削除（完全入れ替えのため）
                     const querySnapshot = await getDocs(collection(db, 'pto_data'));
+                    
+                    // 削除のバッチ処理（500件制限対策）
+                    const deleteChunks = [];
+                    let currentDeleteBatch = writeBatch(db);
+                    let deleteCount = 0;
+                    
                     querySnapshot.forEach((document) => {
-                      batch.delete(document.ref);
+                      currentDeleteBatch.delete(document.ref);
+                      deleteCount++;
+                      if (deleteCount === 500) {
+                        deleteChunks.push(currentDeleteBatch.commit());
+                        currentDeleteBatch = writeBatch(db);
+                        deleteCount = 0;
+                      }
                     });
+                    if (deleteCount > 0) {
+                      deleteChunks.push(currentDeleteBatch.commit());
+                    }
+                    await Promise.all(deleteChunks);
 
-                    // 新しいデータを追加
+                    // 新しいデータを追加（500件制限対策）
+                    const addChunks = [];
+                    let currentAddBatch = writeBatch(db);
+                    let addCount = 0;
+
                     parsedData.forEach((emp) => {
-                      // IDが空の場合はランダムなIDを生成
-                      const docId = emp.id || Math.random().toString(36).substring(2, 15);
-                      const docRef = doc(db, 'pto_data', docId);
-                      batch.set(docRef, emp);
+                      const docRef = doc(db, 'pto_data', emp.id);
+                      currentAddBatch.set(docRef, emp);
+                      addCount++;
+                      if (addCount === 500) {
+                        addChunks.push(currentAddBatch.commit());
+                        currentAddBatch = writeBatch(db);
+                        addCount = 0;
+                      }
                     });
+                    if (addCount > 0) {
+                      addChunks.push(currentAddBatch.commit());
+                    }
+                    await Promise.all(addChunks);
 
-                    await batch.commit();
                     setError(null);
-                  } catch (err) {
+                  } catch (err: any) {
                     console.error('Firestore Write Error:', err);
-                    setError('データの保存に失敗しました。管理者権限が必要です。');
+                    setError(`データの保存に失敗しました: ${err.message}`);
                   } finally {
                     setIsUploading(false);
                   }
@@ -355,16 +381,24 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans print:bg-white" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}>
       {/* ヘッダー */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 print:static print:border-none print:shadow-none">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Calendar className="w-6 h-6 text-blue-600" />
             <h1 className="text-xl font-bold text-slate-800 hidden sm:block">有給休暇 消化率ダッシュボード</h1>
-            <h1 className="text-lg font-bold text-slate-800 sm:hidden">有給ダッシュボード</h1>
+            <h1 className="text-lg font-bold text-slate-800 sm:hidden print:hidden">有給ダッシュボード</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 print:hidden">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-emerald-50 text-emerald-700 rounded-md hover:bg-emerald-100 transition-colors text-sm font-medium border border-emerald-200"
+              title="PDF出力 (印刷)"
+            >
+              <Printer className="w-4 h-4" />
+              <span className="hidden sm:inline">PDF出力</span>
+            </button>
             {isAdmin && (
               <label className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 cursor-pointer transition-colors text-sm font-medium border border-blue-200 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                 <Upload className="w-4 h-4" />
@@ -385,9 +419,9 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 print:py-4 print:space-y-6">
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-3">
+          <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-3 print:hidden">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <p className="text-sm">{error}</p>
           </div>
@@ -413,7 +447,7 @@ export default function App() {
         ) : (
           <>
             {/* サマリーカード */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:grid-cols-3 print:gap-4 print:break-inside-avoid">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
             <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
               <TrendingUp className="w-6 h-6" />
@@ -454,9 +488,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 print:grid-cols-1 print:block print:space-y-8">
           {/* ランキングチャート */}
-          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200 print:break-inside-avoid print:shadow-none print:border-gray-300">
             <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
               <Users className="w-5 h-5 text-slate-500" />
               個人別 消化率ランキング (トップ{isMobile ? '5' : '10'})
@@ -508,7 +542,7 @@ export default function App() {
           </div>
 
           {/* 要注意リスト */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col print:break-inside-avoid print:shadow-none print:border-gray-300">
             <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
               取得日数5日未満リスト
@@ -542,13 +576,13 @@ export default function App() {
         </div>
 
         {/* 詳細データテーブル */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-gray-300">
           <div className="px-6 py-4 border-b border-slate-200">
             <h2 className="text-lg font-bold text-slate-800">職員別 詳細データ</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+              <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200 print:bg-gray-100">
                 <tr>
                   <th className="px-6 py-3 font-medium">社員ID</th>
                   <th className="px-6 py-3 font-medium">氏名</th>
@@ -562,7 +596,7 @@ export default function App() {
                 {data.map((emp) => {
                   const rate = emp.grantedDays > 0 ? ((emp.usedDays / emp.grantedDays) * 100).toFixed(1) : '0.0';
                   return (
-                    <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <tr key={emp.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors print:break-inside-avoid">
                       <td className="px-6 py-4 text-slate-500">{emp.id}</td>
                       <td className="px-6 py-4 font-medium text-slate-900">{emp.name}</td>
                       <td className="px-6 py-4 text-slate-500">{emp.grantDate}</td>
