@@ -19,6 +19,7 @@ service cloud.firestore {
     // Document ID: system
     // Fields:
     //   - lastUpdated: string (required, max 50 chars)
+    //   - lastUpdatedYMD: string (optional, max 20 chars)
     //
     // ===============================================================
 
@@ -50,8 +51,9 @@ service cloud.firestore {
     }
 
     function isValidMetadata(data) {
-      return hasOnlyAllowedFields(['lastUpdated']) &&
-             data.lastUpdated is string && data.lastUpdated.size() > 0 && data.lastUpdated.size() < 50;
+      return hasOnlyAllowedFields(['lastUpdated', 'lastUpdatedYMD']) &&
+             data.lastUpdated is string && data.lastUpdated.size() > 0 && data.lastUpdated.size() < 50 &&
+             (!('lastUpdatedYMD' in data) || (data.lastUpdatedYMD is string && data.lastUpdatedYMD.size() < 20));
     }
 
     // ===============================================================

@@ -89,8 +89,16 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [lastUpdatedYMD, setLastUpdatedYMD] = useState<string | null>(null);
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
 
   const isAdmin = user?.email === 'alwayshappys2.forever@gmail.com';
+
+  useEffect(() => {
+    // インアプリブラウザ（Instagram, LINE, Facebookなど）の検知
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isInApp = /instagram|fban|fbav|line|micromessenger/.test(ua);
+    setIsInAppBrowser(isInApp);
+  }, []);
 
   useEffect(() => {
     if (lastUpdatedYMD) {
@@ -157,7 +165,11 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error(err);
-      setError('ログインに失敗しました。');
+      if (err.code === 'auth/disallowed-useragent') {
+        setError('このブラウザ（インアプリブラウザ）ではGoogleログインが制限されています。SafariやChromeなどの標準ブラウザで開き直してください。');
+      } else {
+        setError('ログインに失敗しました。');
+      }
     }
   };
 
@@ -425,12 +437,41 @@ export default function App() {
         <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 max-w-md w-full text-center">
           <Calendar className="w-12 h-12 text-blue-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-slate-800 mb-2">有給休暇ダッシュボード</h1>
-          <p className="text-slate-500 mb-8">
-            ダッシュボードを閲覧するには、Googleアカウントでログインしてください。
-          </p>
+          
+          {isInAppBrowser ? (
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg mb-6 text-left">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-bold text-amber-800 mb-1">標準ブラウザで開いてください</p>
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    InstagramやLINEなどのアプリ内ブラウザでは、Googleのセキュリティポリシーによりログインが制限されています。<br /><br />
+                    右上のメニュー（...）から<strong>「ブラウザで開く」</strong>または<strong>「Safari/Chromeで開く」</strong>を選択してください。
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-slate-500 mb-8">
+              ダッシュボードを閲覧するには、Googleアカウントでログインしてください。
+            </p>
+          )}
+
+          {error && (
+            <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center gap-2 text-sm text-left">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <p>{error}</p>
+            </div>
+          )}
+
           <button
             onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+            disabled={isInAppBrowser}
+            className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md transition-colors font-medium ${
+              isInAppBrowser 
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
           >
             <LogIn className="w-5 h-5" />
             Googleでログイン
