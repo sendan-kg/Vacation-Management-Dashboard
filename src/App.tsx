@@ -67,6 +67,19 @@ const CustomizedAxisTick = (props: any) => {
   );
 };
 
+// --- 期限間近チェック ---
+const isDeadlineApproaching = (grantDateStr: string) => {
+  const normalizedDateStr = grantDateStr.replace(/\//g, '-');
+  const grantDate = new Date(normalizedDateStr);
+  if (isNaN(grantDate.getTime())) return false;
+  
+  const nextGrantDate = new Date(grantDate.getFullYear() + 1, grantDate.getMonth(), grantDate.getDate());
+  const now = new Date();
+  const threeMonthsFromNow = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
+  
+  return nextGrantDate <= threeMonthsFromNow;
+};
+
 export default function App() {
   const [data, setData] = useState<EmployeeData[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +203,13 @@ export default function App() {
 
     // 消化率で降順ソート
     chart.sort((a, b) => b.rate - a.rate);
+
+    // 取得日数5日未満のリストを付与日が古い順にソート
+    alerts.sort((a, b) => {
+      const dateA = new Date(a.grantDate.replace(/\//g, '-')).getTime();
+      const dateB = new Date(b.grantDate.replace(/\//g, '-')).getTime();
+      return dateA - dateB;
+    });
 
     // モバイルの場合はトップ5、PCの場合はトップ10を抽出
     const displayCount = isMobile ? 5 : 10;
@@ -585,18 +605,24 @@ export default function App() {
             
             <div className="flex-1 overflow-y-auto pr-2 space-y-3">
               {alertList.length > 0 ? (
-                alertList.map((emp) => (
-                  <div key={emp.id} className="p-4 rounded-lg border border-amber-200 bg-amber-50 flex justify-between items-center">
-                    <div>
-                      <p className="font-bold text-slate-800">{emp.name}</p>
-                      <p className="text-xs text-slate-500">{emp.department} | 付与日: {emp.grantDate}</p>
+                alertList.map((emp) => {
+                  const isRed = isDeadlineApproaching(emp.grantDate);
+                  return (
+                    <div key={emp.id} className={`p-4 rounded-lg border flex justify-between items-center ${isRed ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-800">{emp.name}</p>
+                          {isRed && <span className="text-[10px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded">期限間近</span>}
+                        </div>
+                        <p className="text-xs text-slate-500">{emp.department} | 付与日: {emp.grantDate}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-sm font-medium ${isRed ? 'text-red-700' : 'text-amber-700'}`}>消化: {emp.usedDays}日</p>
+                        <p className={`text-xs ${isRed ? 'text-red-600 font-bold' : 'text-amber-600'}`}>残: {emp.grantedDays - emp.usedDays}日</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-amber-700">消化: {emp.usedDays}日</p>
-                      <p className="text-xs text-amber-600">残: {emp.grantedDays - emp.usedDays}日</p>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 py-8">
                   <CheckCircle className="w-12 h-12 text-emerald-400 mb-2" />
