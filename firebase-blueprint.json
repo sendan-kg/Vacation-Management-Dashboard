@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "EmployeeData": {
+      "title": "Employee Data",
+      "description": "PTO data for an employee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "department": { "type": "string", "maxLength": 100 },
+        "grantDate": { "type": "string", "maxLength": 20 },
+        "grantedDays": { "type": "number", "minimum": 0 },
+        "usedDays": { "type": "number", "minimum": 0 }
+      },
+      "required": ["id", "name", "department", "grantDate", "grantedDays", "usedDays"]
+    }
+  },
+  "firestore": {
+    "/pto_data/{employeeId}": {
+      "schema": { "$ref": "#/entities/EmployeeData" },
+      "description": "Stores PTO data for each employee"
+    }
+  }
+}

@@ -20,10 +20,15 @@ import {
   TrendingUp,
   AlertCircle,
   CheckCircle,
-  Crown
+  Crown,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import Papa from 'papaparse';
 import Encoding from 'encoding-japanese';
+import { auth, db } from './firebase';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { collection, onSnapshot, writeBatch, doc, getDocs } from 'firebase/firestore';
 
 // --- 型定義 ---
 interface EmployeeData {
@@ -34,18 +39,6 @@ interface EmployeeData {
   grantedDays: number;
   usedDays: number;
 }
-
-// --- サンプルデータ ---
-const INITIAL_DATA: EmployeeData[] = [
-  { id: '001', name: '山田 太郎', department: '営業部', grantDate: '2025-04-01', grantedDays: 20, usedDays: 15 },
-  { id: '002', name: '佐藤 花子', department: '総務部', grantDate: '2025-10-01', grantedDays: 15, usedDays: 2 },
-  { id: '003', name: '鈴木 一郎', department: '開発部', grantDate: '2025-06-01', grantedDays: 20, usedDays: 8 },
-  { id: '004', name: '高橋 健太', department: '営業部', grantDate: '2025-04-01', grantedDays: 10, usedDays: 9 },
-  { id: '005', name: '伊藤 美咲', department: '開発部', grantDate: '2025-08-01', grantedDays: 12, usedDays: 1 },
-  { id: '006', name: '渡辺 翔太', department: '総務部', grantDate: '2025-04-01', grantedDays: 20, usedDays: 20 },
-  { id: '007', name: '田中 理恵', department: '営業部', grantDate: '2025-12-01', grantedDays: 10, usedDays: 0 },
-  { id: '008', name: '中村 健', department: '開発部', grantDate: '2025-04-01', grantedDays: 15, usedDays: 4 },
-];
 
 // --- カスタムX軸ラベル ---
 const CustomizedAxisTick = (props: any) => {
@@ -74,9 +67,65 @@ const CustomizedAxisTick = (props: any) => {
 };
 
 export default function App() {
-  const [data, setData] = useState<EmployeeData[]>(INITIAL_DATA);
+  const [data, setData] = useState<EmployeeData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const isAdmin = user?.email === 'alwayshappys2.forever@gmail.com';
+
+  // 認証状態の監視
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // データの取得（リアルタイム同期）
+  useEffect(() => {
+    if (!isAuthReady || !user) return;
+
+    const unsubscribe = onSnapshot(
+      collection(db, 'pto_data'),
+      (snapshot) => {
+        const fetchedData: EmployeeData[] = [];
+        snapshot.forEach((doc) => {
+          fetchedData.push(doc.data() as EmployeeData);
+        });
+        setData(fetchedData);
+        setError(null);
+      },
+      (err) => {
+        console.error('Firestore Error:', err);
+        setError('データの取得に失敗しました。権限がない可能性があります。');
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, isAuthReady]);
+
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error(err);
+      setError('ログインに失敗しました。');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setData([]);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // ウィンドウサイズを監視してモバイルかどうかを判定
   useEffect(() => {
@@ -216,8 +265,37 @@ export default function App() {
               }
               
               if (parsedData.length > 0) {
-                setData(parsedData);
-                setError(null);
+                // Firestoreに一括保存
+                const saveToFirestore = async () => {
+                  setIsUploading(true);
+                  try {
+                    const batch = writeBatch(db);
+                    
+                    // 既存のデータをすべて削除（完全入れ替えのため）
+                    const querySnapshot = await getDocs(collection(db, 'pto_data'));
+                    querySnapshot.forEach((document) => {
+                      batch.delete(document.ref);
+                    });
+
+                    // 新しいデータを追加
+                    parsedData.forEach((emp) => {
+                      // IDが空の場合はランダムなIDを生成
+                      const docId = emp.id || Math.random().toString(36).substring(2, 15);
+                      const docRef = doc(db, 'pto_data', docId);
+                      batch.set(docRef, emp);
+                    });
+
+                    await batch.commit();
+                    setError(null);
+                  } catch (err) {
+                    console.error('Firestore Write Error:', err);
+                    setError('データの保存に失敗しました。管理者権限が必要です。');
+                  } finally {
+                    setIsUploading(false);
+                  }
+                };
+                
+                saveToFirestore();
               } else {
                 setError('有効なデータが見つかりませんでした。CSVの形式を確認してください。');
               }
@@ -247,6 +325,35 @@ export default function App() {
     e.target.value = '';
   }, []);
 
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 max-w-md w-full text-center">
+          <Calendar className="w-12 h-12 text-blue-600 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">有給休暇ダッシュボード</h1>
+          <p className="text-slate-500 mb-8">
+            ダッシュボードを閲覧するには、Googleアカウントでログインしてください。
+          </p>
+          <button
+            onClick={handleLogin}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+          >
+            <LogIn className="w-5 h-5" />
+            Googleでログイン
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       {/* ヘッダー */}
@@ -254,14 +361,26 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Calendar className="w-6 h-6 text-blue-600" />
-            <h1 className="text-xl font-bold text-slate-800">有給休暇 消化率ダッシュボード</h1>
+            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">有給休暇 消化率ダッシュボード</h1>
+            <h1 className="text-lg font-bold text-slate-800 sm:hidden">有給ダッシュボード</h1>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 cursor-pointer transition-colors text-sm font-medium border border-blue-200">
-              <Upload className="w-4 h-4" />
-              CSVデータ更新
-              <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
-            </label>
+          <div className="flex items-center gap-3">
+            {isAdmin && (
+              <label className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 cursor-pointer transition-colors text-sm font-medium border border-blue-200 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <Upload className="w-4 h-4" />
+                <span className="hidden sm:inline">{isUploading ? '更新中...' : 'CSVデータ更新'}</span>
+                <span className="sm:hidden">更新</span>
+                <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+              </label>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition-colors text-sm font-medium border border-slate-200"
+              title="ログアウト"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">ログアウト</span>
+            </button>
           </div>
         </div>
       </header>
@@ -274,8 +393,27 @@ export default function App() {
           </div>
         )}
 
-        {/* サマリーカード */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {data.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
+            <FileSpreadsheet className="w-16 h-16 text-slate-300 mb-4" />
+            <h2 className="text-xl font-bold text-slate-700 mb-2">データがありません</h2>
+            <p className="text-slate-500 mb-6 max-w-md">
+              {isAdmin 
+                ? "右上の「CSVデータ更新」ボタンから、有給休暇のデータが含まれたCSVファイルをアップロードしてください。"
+                : "現在、表示できる有給休暇データがありません。管理者がデータを更新するまでお待ちください。"}
+            </p>
+            {isAdmin && (
+              <label className={`flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer transition-colors font-medium shadow-sm ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <Upload className="w-5 h-5" />
+                {isUploading ? 'アップロード中...' : 'CSVファイルをアップロード'}
+                <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+              </label>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* サマリーカード */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
             <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
               <TrendingUp className="w-6 h-6" />
@@ -451,6 +589,8 @@ export default function App() {
             </table>
           </div>
         </div>
+          </>
+        )}
       </main>
     </div>
   );
