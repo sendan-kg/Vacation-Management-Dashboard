@@ -4,6 +4,11 @@
 
 function required(name: string, value: string | undefined): string {
   if (!value) {
+    // build 時 (Vercel 等) に env 未設定でも build 通す。runtime で MSAL が落ちて気付ける
+    if (typeof window === "undefined") {
+      console.warn(`[env] ${name} が未設定。runtime まで遅延します`);
+      return "";
+    }
     throw new Error(`環境変数 ${name} が未設定です`);
   }
   return value;
