@@ -16,3 +16,7 @@ NEXT_PUBLIC_ADMIN_UPNS=
 
 # 閲覧者 UPN（CSV、当面空でOK。将来複数人で閲覧する場合に追加）
 NEXT_PUBLIC_VIEWER_UPNS=
+
+# ダッシュボードから除外する社員番号（CSV）。管理者・システムアカウント等。
+# 未設定なら 901,902 がデフォルト。明示的に空にしたい場合は = の後を空にする。
+# NEXT_PUBLIC_EXCLUDED_EMPLOYEE_NOS=901,902

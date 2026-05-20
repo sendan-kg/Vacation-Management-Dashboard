@@ -48,6 +48,17 @@ export const env = {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
+  /**
+   * ダッシュボードから除外する社員番号（CSV）。
+   * 管理者・システムアカウント等を集計から除く用途。
+   * env 未設定なら ["901", "902"] がデフォルト。
+   */
+  excludedEmployeeNos:
+    process.env.NEXT_PUBLIC_EXCLUDED_EMPLOYEE_NOS !== undefined
+      ? process.env.NEXT_PUBLIC_EXCLUDED_EMPLOYEE_NOS.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : ["901", "902"],
 };
 
 export function isAdminEmail(email: string | null | undefined): boolean {

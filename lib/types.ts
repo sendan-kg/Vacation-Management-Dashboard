@@ -25,11 +25,14 @@ export interface LeaveRecord {
   name: string;
   department: string;
   position: string;
+  /** 直近の付与日 (YYYY-MM-DD)。雇入年月日 = 起算日 */
+  grantDate: string;
   grantedDays: number;
   carryoverDays: number;
   totalDays: number;
   usedDays: number;
   remainingDays: number;
+  /** 消化率 = usedDays / grantedDays * 100（合計ではなく今年度付与日数を分母にする） */
   utilizationRate: number;
   alertFlag: AlertFlag;
 }
@@ -50,6 +53,7 @@ export interface ParsedLeaveRecord {
   name: string;
   department: string;
   position: string;
+  grantDate: string;
   grantedDays: number;
   carryoverDays: number;
   totalDays: number;

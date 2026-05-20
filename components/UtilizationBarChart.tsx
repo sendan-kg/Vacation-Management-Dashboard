@@ -4,7 +4,7 @@ import {
   Bar,
   BarChart,
   Cell,
-  LabelList,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -12,7 +12,13 @@ import {
 } from "recharts";
 import { useEffect, useState } from "react";
 import type { LeaveRecord } from "@/lib/types";
-import { bucketColor, bucketize, rankByUtilization } from "@/lib/domain/leaveMetrics";
+import {
+  CATEGORY_COLOR,
+  CATEGORY_LABEL,
+  categorize,
+  rankByUtilization,
+  type UtilizationCategory,
+} from "@/lib/domain/leaveMetrics";
 
 interface Props {
   records: LeaveRecord[];
@@ -29,65 +35,85 @@ export function UtilizationBarChart({ records }: Props) {
   }, []);
 
   const topN = isMobile ? 5 : 10;
-  const ranked = rankByUtilization(records.filter((r) => r.totalDays > 0)).slice(
+  const ranked = rankByUtilization(records.filter((r) => r.grantedDays > 0)).slice(
     0,
     topN,
   );
   const data = ranked.map((r) => ({
     name: r.name || r.employeeNo,
     rate: r.utilizationRate,
-    bucket: bucketize(r.utilizationRate),
+    category: categorize(r.utilizationRate),
   }));
+
+  // Y軸の上限: 最大値を 10% 単位で切り上げ、最低 100%
+  const maxRate = data.reduce((m, d) => Math.max(m, d.rate), 0);
+  const yMax = Math.max(100, Math.ceil(maxRate / 10) * 10 + (maxRate % 10 === 0 ? 0 : 0));
 
   return (
     <section
       className="rounded-2xl border border-zinc-200 bg-white p-4"
       aria-label="消化率ランキング"
     >
-      <div className="mb-3 flex items-baseline justify-between">
+      <div className="mb-3 flex items-baseline gap-2">
+        <span aria-hidden>👥</span>
         <h2 className="text-sm font-semibold text-zinc-900">
-          消化率ランキング（トップ {topN}）
+          個人別 消化率ランキング (トップ {topN})
         </h2>
-        <span className="text-xs text-zinc-500">単位: %</span>
       </div>
-      <div className="h-[320px] sm:h-[420px]">
+      <div className="h-[360px] sm:h-[440px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
-            layout="vertical"
-            margin={{ top: 4, right: 32, bottom: 4, left: 24 }}
+            margin={{ top: 16, right: 16, bottom: 8, left: 4 }}
           >
             <XAxis
-              type="number"
-              domain={[0, "dataMax + 10"]}
-              tickFormatter={(v) => `${v}%`}
-              fontSize={12}
+              dataKey="name"
+              fontSize={11}
+              interval={0}
+              angle={isMobile ? -30 : 0}
+              textAnchor={isMobile ? "end" : "middle"}
+              height={isMobile ? 60 : 30}
             />
             <YAxis
-              type="category"
-              dataKey="name"
-              width={80}
-              fontSize={12}
-              interval={0}
+              domain={[0, yMax]}
+              tickFormatter={(v) => `${v}%`}
+              fontSize={11}
+              ticks={buildTicks(yMax, maxRate)}
             />
             <Tooltip
               formatter={(v: number) => [`${v.toFixed(1)}%`, "消化率"]}
               cursor={{ fill: "rgba(0,0,0,0.04)" }}
             />
-            <Bar dataKey="rate" radius={[0, 6, 6, 0]}>
+            <Legend
+              verticalAlign="bottom"
+              wrapperStyle={{ paddingTop: 12 }}
+              payload={(
+                ["achieved", "ontrack", "behind"] as UtilizationCategory[]
+              ).map((c) => ({
+                value: CATEGORY_LABEL[c],
+                type: "circle",
+                color: CATEGORY_COLOR[c],
+              }))}
+            />
+            <Bar dataKey="rate" radius={[6, 6, 0, 0]}>
               {data.map((d, i) => (
-                <Cell key={i} fill={bucketColor(d.bucket)} />
+                <Cell key={i} fill={CATEGORY_COLOR[d.category]} />
               ))}
-              <LabelList
-                dataKey="rate"
-                position="right"
-                formatter={(v: number) => `${v.toFixed(1)}%`}
-                fontSize={11}
-              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
     </section>
   );
+}
+
+/**
+ * Y軸の目盛: 0 / 30 / 60 / 90 / max（max > 100% の時はそれも表示）。
+ */
+function buildTicks(yMax: number, maxRate: number): number[] {
+  const base = [0, 30, 60, 90];
+  if (yMax > 100 && maxRate > 100) {
+    return [...base, Math.round(maxRate * 10) / 10];
+  }
+  return [...base, 100];
 }

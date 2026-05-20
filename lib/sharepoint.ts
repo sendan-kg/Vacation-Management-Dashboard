@@ -149,6 +149,7 @@ function toRecord(it: GraphItem): LeaveRecord {
     name: String(f.StaffName ?? ""),
     department: String(f.Department ?? ""),
     position: String(f.Position ?? ""),
+    grantDate: f.GrantDate ? isoToYmdJst(String(f.GrantDate)) : "",
     grantedDays: Number(f.GrantedDays ?? 0),
     carryoverDays: Number(f.CarryoverDays ?? 0),
     totalDays: Number(f.TotalDays ?? 0),
@@ -257,6 +258,8 @@ export async function createRecords(
       StaffName: r.name,
       Department: r.department,
       Position: r.position,
+      // 付与日: JST 正午で送ってタイムゾーンずれを防ぐ
+      ...(r.grantDate ? { GrantDate: ymdToIsoJstNoon(r.grantDate) } : {}),
       GrantedDays: r.grantedDays,
       CarryoverDays: r.carryoverDays,
       TotalDays: r.totalDays,

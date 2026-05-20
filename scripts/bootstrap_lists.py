@@ -63,6 +63,8 @@ RECORD_COLUMNS = [
     {"name": "StaffName", "label": "氏名", "type": "Text", "maxLength": 100, "required": True},
     {"name": "Department", "label": "部門", "type": "Text", "maxLength": 100},
     {"name": "Position", "label": "役職", "type": "Text", "maxLength": 100},
+    {"name": "GrantDate", "label": "付与日", "type": "DateTime",
+     "displayFormat": "DateOnly"},
     {"name": "GrantedDays", "label": "今年度付与日数", "type": "Number", "decimal": 1},
     {"name": "CarryoverDays", "label": "前年度繰越日数", "type": "Number", "decimal": 1},
     {"name": "TotalDays", "label": "合計日数", "type": "Number", "decimal": 1},

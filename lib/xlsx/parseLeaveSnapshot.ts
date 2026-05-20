@@ -3,12 +3,13 @@
  *
  * 想定ソース: `hr/leave-management/年次有給休暇管理簿（一覧）verX.X{YYYY-MM-DD}.xlsm`
  * メインシート: 「年次有給休暇管理簿（一覧）」
- *   - 行 1-6: タイトル/見出し行（merged cells で複雑なので zero-indexed 6 = R7 から開始）
- *   - 列構成（0-indexed）:
- *     0:No / 1:従業員番号 / 2:部門 / 3:役職 / 4:氏名 / 5:アラート / 6:取得日数
- *     11:合計日数 / 13:今年度付与日数 / 14:前年度繰越日数
  *
- * 実 xlsm のレイアウト変更があった場合はこの定数を見直すこと。
+ * 列構成（0-indexed）:
+ *   0:No / 1:従業員番号 / 2:部門 / 3:役職 / 4:氏名 / 5:アラート / 6:取得日数
+ *   8:雇入年月日（=付与日） / 11:合計日数 / 13:今年度付与日数 / 14:前年度繰越日数
+ *
+ * 行位置は固定せず、「社員番号が数値文字列の行」だけをデータとして拾う。
+ * → 空行・ヘッダー（"従業員番号" 等）・タイトル行は自動でスキップされる。
  */
 import * as XLSX from "xlsx";
 import type {
@@ -18,7 +19,6 @@ import type {
 } from "../types";
 
 const SHEET_NAME = "年次有給休暇管理簿（一覧）";
-const DATA_START_ROW = 6; // 0-indexed
 
 const COL = {
   no: 0,
@@ -28,6 +28,7 @@ const COL = {
   name: 4,
   alert: 5,
   usedDays: 6,
+  grantDate: 8,
   totalDays: 11,
   grantedDays: 13,
   carryoverDays: 14,
@@ -42,37 +43,44 @@ export function parseLeaveSnapshotBuffer(
   if (!sheet) {
     throw new Error(`シート「${SHEET_NAME}」が見つかりません`);
   }
+  // blankrows:true でシート行番号と配列 index を一致させ、全行を一律スキャン
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
-    blankrows: false,
+    blankrows: true,
     defval: null,
   });
 
   const records: ParsedLeaveRecord[] = [];
-  for (let i = DATA_START_ROW; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     if (!r || !Array.isArray(r)) continue;
-    const name = toStr(r[COL.name]);
+
     const employeeNo = toStr(r[COL.employeeNo]);
-    if (!name && !employeeNo) continue;
+    const name = toStr(r[COL.name]);
+
+    // 社員番号が数値文字列でなければ非データ行 (タイトル/ヘッダー/空行) とみなしスキップ
+    if (!employeeNo || !/^\d+$/.test(employeeNo)) continue;
+    if (!name) continue;
 
     const usedDays = toNum(r[COL.usedDays]);
     const totalDays = toNum(r[COL.totalDays]);
     const grantedDays = toNum(r[COL.grantedDays]);
     const carryoverDays = toNum(r[COL.carryoverDays]);
     const remainingDays = Math.max(0, totalDays - usedDays);
+    // 消化率は「今年度付与日数」を分母にする（合計ではない）
     const utilizationRate =
-      totalDays > 0 ? round1((usedDays / totalDays) * 100) : 0;
+      grantedDays > 0 ? round1((usedDays / grantedDays) * 100) : 0;
 
     let alertFlag: AlertFlag = "";
     if (utilizationRate > 100) alertFlag = "100%超";
-    else if (usedDays === 0 && totalDays > 0) alertFlag = "0%";
+    else if (usedDays === 0 && grantedDays > 0) alertFlag = "0%";
 
     records.push({
       employeeNo,
       name,
       department: toStr(r[COL.department]),
       position: toStr(r[COL.position]),
+      grantDate: toDateStr(r[COL.grantDate]),
       grantedDays: round1(grantedDays),
       carryoverDays: round1(carryoverDays),
       totalDays: round1(totalDays),
@@ -97,6 +105,31 @@ function toNum(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""));
   return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Excel の日付セルを "YYYY-MM-DD" に変換。
+ * cellDates:true で読んだので Date オブジェクト or 文字列のどちらかが入る。
+ */
+function toDateStr(v: unknown): string {
+  if (!v) return "";
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Asia/Tokyo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(v);
+  }
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+  if (m) {
+    const yyyy = m[1];
+    const mm = String(m[2]).padStart(2, "0");
+    const dd = String(m[3]).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return "";
 }
 
 function round1(n: number): number {

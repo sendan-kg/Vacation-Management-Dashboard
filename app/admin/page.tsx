@@ -111,12 +111,14 @@ function AdminUpload({
       setProgress("");
       setPhase("done");
     } catch (e) {
-      const msg =
-        e instanceof GraphError
-          ? e.toUserMessage()
-          : e instanceof Error
-            ? e.message
-            : "アップロードに失敗しました";
+      let msg: string;
+      if (e instanceof GraphError) {
+        msg = `${e.toUserMessage()}\n\n[詳細] status=${e.status}\n${e.body.slice(0, 500)}`;
+      } else if (e instanceof Error) {
+        msg = e.message;
+      } else {
+        msg = "アップロードに失敗しました";
+      }
       setError(msg);
       setPhase("error");
     }
@@ -173,7 +175,7 @@ function AdminUpload({
 
         {error && (
           <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
+            <pre className="whitespace-pre-wrap break-all font-sans">{error}</pre>
           </div>
         )}
 

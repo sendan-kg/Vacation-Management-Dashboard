@@ -15,7 +15,7 @@ import {
   GraphError,
 } from "@/lib/sharepoint";
 import type { LeaveRecord, LeaveSnapshot } from "@/lib/types";
-import { computeKpi } from "@/lib/domain/leaveMetrics";
+import { computeKpi, filterVisibleRecords } from "@/lib/domain/leaveMetrics";
 
 export default function DashboardPage() {
   return (
@@ -77,7 +77,9 @@ function Dashboard({
     };
   }, [token]);
 
-  const kpi = computeKpi(records);
+  // 管理者(901, 902 等)を除外してから全コンポーネントに渡す
+  const visibleRecords = filterVisibleRecords(records);
+  const kpi = computeKpi(visibleRecords);
 
   return (
     <div className="min-h-screen">
@@ -99,12 +101,12 @@ function Dashboard({
         {!loading && !snapshot && (
           <EmptyState isAdmin={isAdmin} />
         )}
-        {!loading && snapshot && records.length > 0 && (
+        {!loading && snapshot && visibleRecords.length > 0 && (
           <>
             <KpiSummary kpi={kpi} />
-            <UtilizationBarChart records={records} />
-            <AlertList records={records} />
-            <StaffTable records={records} />
+            <UtilizationBarChart records={visibleRecords} />
+            <AlertList records={visibleRecords} />
+            <StaffTable records={visibleRecords} />
             <footer className="no-print pt-4 text-xs text-zinc-400 text-center">
               データソース: {snapshot.filename} ／ 取込:{" "}
               {new Date(snapshot.uploadedAt).toLocaleString("ja-JP", {

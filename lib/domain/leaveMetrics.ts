@@ -1,36 +1,52 @@
 /**
  * KPI 集計ロジック。
- * Python `_workflows/leave-management-flow/make_leave_report.py` を TS に移植。
+ * 消化率の分母は「今年度付与日数 (grantedDays)」を使う（合計ではない）。
  */
+import { env } from "../env";
 import type { LeaveRecord, ParsedLeaveRecord } from "../types";
+
+/**
+ * ダッシュボードから除外する社員番号（管理者・システム等）を除いたレコードを返す。
+ * env.excludedEmployeeNos で制御。
+ */
+export function filterVisibleRecords<T extends LeaveRecord | ParsedLeaveRecord>(
+  records: T[],
+): T[] {
+  const excluded = new Set(env.excludedEmployeeNos);
+  return records.filter((r) => !excluded.has(r.employeeNo));
+}
+
+/**
+ * 労基法の年5日取得義務の対象判定。
+ * 年10日以上付与される労働者が対象 (週所定労働日数が少ない比例付与者は対象外)。
+ */
+export const LABOR_LAW_GRANT_THRESHOLD = 10;
 
 export interface LeaveKpi {
   staffCount: number;
-  /** 付与あり職員（totalDays > 0）の数 */
+  /** 付与あり職員（grantedDays > 0）の数 */
   eligibleStaffCount: number;
+  /** 全体付与日数 = 今年度付与日数の合計 */
   totalGrantedDays: number;
   totalUsedDays: number;
   overallUtilizationRate: number;
-  /** 取得日数が 5 日未満の職員数（付与あり職員のみ母集団） */
+  /** 取得日数 5 日未満の職員数（年10日以上付与の労働者のみ母集団 = 労基法対象） */
   under5DaysCount: number;
-  /** 消化率 100% 超の職員数 */
-  overUtilizationCount: number;
-  /** 消化率 0% の職員数 */
-  zeroUtilizationCount: number;
 }
 
 type RecordLike = ParsedLeaveRecord | LeaveRecord;
 
 export function computeKpi(records: RecordLike[]): LeaveKpi {
   const staffCount = records.length;
-  const eligible = records.filter((r) => r.totalDays > 0);
-  const totalGrantedDays = sum(records.map((r) => r.totalDays));
+  const eligible = records.filter((r) => r.grantedDays > 0);
+  const totalGrantedDays = sum(eligible.map((r) => r.grantedDays));
   const totalUsedDays = sum(records.map((r) => r.usedDays));
   const overallUtilizationRate =
     totalGrantedDays > 0 ? round1((totalUsedDays / totalGrantedDays) * 100) : 0;
-  const under5DaysCount = eligible.filter((r) => r.usedDays < 5).length;
-  const overUtilizationCount = records.filter((r) => r.utilizationRate > 100).length;
-  const zeroUtilizationCount = eligible.filter((r) => r.usedDays === 0).length;
+  // 労基法の年5日取得義務は年10日以上付与の労働者が対象 (週2-3勤務の比例付与者は対象外)
+  const under5DaysCount = eligible.filter(
+    (r) => r.grantedDays >= LABOR_LAW_GRANT_THRESHOLD && r.usedDays < 5,
+  ).length;
   return {
     staffCount,
     eligibleStaffCount: eligible.length,
@@ -38,8 +54,6 @@ export function computeKpi(records: RecordLike[]): LeaveKpi {
     totalUsedDays: round1(totalUsedDays),
     overallUtilizationRate,
     under5DaysCount,
-    overUtilizationCount,
-    zeroUtilizationCount,
   };
 }
 
@@ -56,41 +70,30 @@ export function rankByUtilization<T extends RecordLike>(records: T[]): T[] {
 }
 
 /**
- * 消化率に応じた色分けバケット。
- *  100% 超 = "over"
- *  90-100% = "high"
- *  60-90%  = "mid"
- *  30-60%  = "low"
- *  0-30%   = "danger"
- *  0%      = "zero"
+ * 消化率の3カテゴリ（参考資料の凡例に揃える）:
+ *   "achieved" = 100% 達成（消化率 ≥ 100%）
+ *   "ontrack"  = 消化率 30% 以上 100% 未満
+ *   "behind"   = 消化率 30% 未満（要フォロー）
  */
-export type UtilizationBucket = "over" | "high" | "mid" | "low" | "danger" | "zero";
+export type UtilizationCategory = "achieved" | "ontrack" | "behind";
 
-export function bucketize(rate: number): UtilizationBucket {
-  if (rate > 100) return "over";
-  if (rate >= 90) return "high";
-  if (rate >= 60) return "mid";
-  if (rate >= 30) return "low";
-  if (rate > 0) return "danger";
-  return "zero";
+export function categorize(rate: number): UtilizationCategory {
+  if (rate >= 100) return "achieved";
+  if (rate >= 30) return "ontrack";
+  return "behind";
 }
 
-export function bucketColor(bucket: UtilizationBucket): string {
-  switch (bucket) {
-    case "over":
-      return "#dc2626"; // rose-600
-    case "high":
-      return "#16a34a"; // green-600
-    case "mid":
-      return "#0284c7"; // sky-600
-    case "low":
-      return "#ca8a04"; // yellow-600
-    case "danger":
-      return "#ea580c"; // orange-600
-    case "zero":
-      return "#71717a"; // zinc-500
-  }
-}
+export const CATEGORY_LABEL: Record<UtilizationCategory, string> = {
+  achieved: "100%達成",
+  ontrack: "消化率 30%以上",
+  behind: "消化率 30%未満 (要フォロー)",
+};
+
+export const CATEGORY_COLOR: Record<UtilizationCategory, string> = {
+  achieved: "#f59e0b", // amber-500 (PDFのオレンジ)
+  ontrack: "#3b82f6", // blue-500 (PDFの青)
+  behind: "#ef4444", // red-500 (PDFの赤、要フォロー)
+};
 
 function sum(arr: number[]): number {
   return arr.reduce((a, b) => a + b, 0);

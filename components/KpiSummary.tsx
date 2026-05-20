@@ -7,68 +7,72 @@ interface KpiSummaryProps {
 export function KpiSummary({ kpi }: KpiSummaryProps) {
   return (
     <section
-      className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+      className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
       aria-label="サマリー"
     >
       <Card
-        label="全体消化率"
-        value={`${kpi.overallUtilizationRate.toFixed(1)}%`}
-        sub={`${kpi.totalUsedDays.toFixed(1)} / ${kpi.totalGrantedDays.toFixed(1)} 日`}
+        icon="📈"
+        label="全体平均 消化率"
+        value={`${kpi.overallUtilizationRate.toFixed(1)}`}
+        unit="%"
         tone="primary"
       />
       <Card
-        label="対象職員"
-        value={`${kpi.eligibleStaffCount}名`}
-        sub={`登録 ${kpi.staffCount}名のうち付与あり`}
-        tone="muted"
+        icon="🗒️"
+        label="全体 消化日数 / 総付与日数"
+        value={`${kpi.totalUsedDays.toFixed(1)} / ${kpi.totalGrantedDays.toFixed(0)}`}
+        unit="日"
+        tone="emerald"
       />
       <Card
-        label="取得 5 日未満"
-        value={`${kpi.under5DaysCount}名`}
-        sub="付与あり職員のうち"
-        tone={kpi.under5DaysCount > 0 ? "warning" : "muted"}
-      />
-      <Card
-        label="要注意"
-        value={`${kpi.overUtilizationCount + kpi.zeroUtilizationCount}名`}
-        sub={`超過 ${kpi.overUtilizationCount} / 0% ${kpi.zeroUtilizationCount}`}
-        tone={
-          kpi.overUtilizationCount + kpi.zeroUtilizationCount > 0
-            ? "danger"
-            : "muted"
-        }
+        icon="⚠️"
+        label="取得日数5日未満の職員"
+        value={`${kpi.under5DaysCount}`}
+        unit="名"
+        tone="amber"
       />
     </section>
   );
 }
 
 interface CardProps {
+  icon: string;
   label: string;
   value: string;
-  sub: string;
-  tone: "primary" | "muted" | "warning" | "danger";
+  unit: string;
+  tone: "primary" | "emerald" | "amber";
 }
 
-function Card({ label, value, sub, tone }: CardProps) {
+function Card({ icon, label, value, unit, tone }: CardProps) {
   const toneClass = {
     primary: "border-indigo-200 bg-indigo-50",
-    muted: "border-zinc-200 bg-white",
-    warning: "border-amber-200 bg-amber-50",
-    danger: "border-rose-200 bg-rose-50",
+    emerald: "border-emerald-200 bg-emerald-50",
+    amber: "border-amber-200 bg-amber-50",
   }[tone];
-  const valueClass = {
-    primary: "text-indigo-700",
-    muted: "text-zinc-900",
-    warning: "text-amber-700",
-    danger: "text-rose-700",
+  const iconBgClass = {
+    primary: "bg-indigo-100 text-indigo-600",
+    emerald: "bg-emerald-100 text-emerald-700",
+    amber: "bg-amber-100 text-amber-700",
   }[tone];
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <div className="text-xs text-zinc-600">{label}</div>
-      <div className={`mt-1 text-2xl sm:text-3xl font-bold ${valueClass}`}>
-        {value}
+    <div className={`rounded-2xl border px-4 py-4 ${toneClass}`}>
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex-shrink-0 size-10 rounded-xl flex items-center justify-center text-lg ${iconBgClass}`}
+          aria-hidden
+        >
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-zinc-600 leading-tight">{label}</div>
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="text-3xl sm:text-4xl font-bold text-zinc-900">
+              {value}
+            </span>
+            <span className="text-sm text-zinc-600">{unit}</span>
+          </div>
+        </div>
       </div>
-      <div className="mt-1 text-xs text-zinc-500">{sub}</div>
     </div>
   );
 }
