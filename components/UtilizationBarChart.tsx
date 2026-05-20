@@ -4,7 +4,6 @@ import {
   Bar,
   BarChart,
   Cell,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -81,19 +80,8 @@ export function UtilizationBarChart({ records }: Props) {
               ticks={buildTicks(yMax, maxRate)}
             />
             <Tooltip
-              formatter={(v: number) => [`${v.toFixed(1)}%`, "消化率"]}
+              formatter={(v) => [`${Number(v).toFixed(1)}%`, "消化率"]}
               cursor={{ fill: "rgba(0,0,0,0.04)" }}
-            />
-            <Legend
-              verticalAlign="bottom"
-              wrapperStyle={{ paddingTop: 12 }}
-              payload={(
-                ["achieved", "ontrack", "behind"] as UtilizationCategory[]
-              ).map((c) => ({
-                value: CATEGORY_LABEL[c],
-                type: "circle",
-                color: CATEGORY_COLOR[c],
-              }))}
             />
             <Bar dataKey="rate" radius={[6, 6, 0, 0]}>
               {data.map((d, i) => (
@@ -102,6 +90,18 @@ export function UtilizationBarChart({ records }: Props) {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      </div>
+      <div className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-zinc-700">
+        {(["achieved", "ontrack", "behind"] as UtilizationCategory[]).map((c) => (
+          <span key={c} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className="inline-block size-3 rounded-full"
+              style={{ backgroundColor: CATEGORY_COLOR[c] }}
+            />
+            {CATEGORY_LABEL[c]}
+          </span>
+        ))}
       </div>
     </section>
   );
