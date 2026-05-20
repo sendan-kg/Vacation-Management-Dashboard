@@ -1,0 +1,18 @@
+# このファイルを .env.local にリネームして値を埋めてください。
+
+# Azure AD アプリ (sendan-minutes-bot を共有)
+NEXT_PUBLIC_AAD_CLIENT_ID=
+NEXT_PUBLIC_AAD_TENANT_ID=
+
+# SharePoint サイト ID (shift-submission と同サイトを推奨)
+NEXT_PUBLIC_GRAPH_SITE_ID=
+
+# bootstrap_lists.py 実行後に取得
+NEXT_PUBLIC_LIST_LEAVE_SNAPSHOTS=
+NEXT_PUBLIC_LIST_LEAVE_RECORDS=
+
+# 管理者 UPN（CSV、xlsm アップロード権限）
+NEXT_PUBLIC_ADMIN_UPNS=
+
+# 閲覧者 UPN（CSV、当面空でOK。将来複数人で閲覧する場合に追加）
+NEXT_PUBLIC_VIEWER_UPNS=
